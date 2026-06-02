@@ -6,7 +6,6 @@ import ipaddress
 import getpass
 from pathlib import Path
 
-
 def es_direccion_valida(direccion):    
     if direccion == "*":
         return True, "255.255.255.255"
@@ -114,7 +113,7 @@ def hilo_emisor():
             #        client_socket.sendall(datos)
             #client_socket.close()
             pass
-            
+
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
     recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -166,3 +165,4 @@ def main():
         sys.exit(0)
 
 main()
+

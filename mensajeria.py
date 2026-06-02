@@ -6,6 +6,7 @@ import ipaddress
 import getpass
 from pathlib import Path
 
+ipGlobal = "192.168.1.127"
 
 def es_direccion_valida(direccion):    
     if direccion == "*":
@@ -22,7 +23,7 @@ def controlEntradaEstandar():
     while True:
 
         #Lee la entrada estandar y valida que tenga el formato correcto, es decir: "ip mensaje" o "ip &file rutaArchivo"
-        entrada = input()
+        entrada = input(" > ")
         entrada = entrada.strip()
         entrada = entrada.split(maxsplit=1)
 
@@ -56,7 +57,7 @@ def controlEntradaEstandar():
             print("Comando invalido")
             continue
 
-def recibirTCP(client_socket, buf):
+def recibirMensajeTCP(client_socket, buf):
 	while True:
 		data = client_socket.recv(1024)
 		if not data:  # Conexión cerrada
@@ -76,7 +77,7 @@ def establecerConexionTCP(ip, puerto):
 
     #vacio el buffer y espero un saludo
     buf = ""
-    buf = recibirTCP(client_socket, buf)
+    buf = recibirMensajeTCP(client_socket, buf)
     buf = buf.removesuffix("\r\n")
 
     if buf != "Redes - Mensajeria - 2026":  
@@ -85,42 +86,57 @@ def establecerConexionTCP(ip, puerto):
 
     return client_socket  
 
-def enviarMensajeUDP():
-    pass
+def enviarMensajeUDP(ip, puerto, msg):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client_socket.sendto(msg.encode('utf-8'), (ip, puerto))
+    
+def hilo_escucha_broadcast():
+    # Crea socket UDP
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.bind((ipGlobal, int(sys.argv[1]) + 1))
 
-def recibirMensajeUDP():
-    pass
+    while True:
+        # Recibe msg
+        data, addr = server_socket.recvfrom(1024)
+        msg = data.decode('utf-8').strip()
+        msg = msg.split("-", 1)
 
-def hilo_emisor(): 
+        Tiempo = time.strftime("%Y.%m.%d %H:%M:%S")
+        usuario = msg[0]
+        print("[" + Tiempo + "] " + str(addr[0]) + " - " + usuario + " dice: " + msg[1])
+        
+def hilo_emisor():
     while True:
         tipo, direccion, mensaje = controlEntradaEstandar()
         usuario = getpass.getuser()
 
         if direccion == "255.255.255.255":
-            pass
+            enviarMensajeUDP(direccion, int(sys.argv[1]) + 1, usuario + "-" + mensaje)
         elif tipo == "mensaje":
             client_socket = establecerConexionTCP(direccion, int(sys.argv[1]))
             enviarMensajeTCP(client_socket, "M-"+ usuario + "-" + mensaje + "\r\n")
             client_socket.close()
-        elif tipo == "archivo":
-            client_socket = establecerConexionTCP(direccion, int(sys.argv[1]))
-            enviarMensajeTCP(client_socket, "A-" + usuario + "-" + " " + "\r\n")
-            with open(str(mensaje), "rb") as archivo:
-                while datos := archivo.read(1024):
-                    client_socket.sendall(datos)
-            client_socket.close()
-            
+        elif tipo == "archivo": 
+            #Falta implementacion, 
+            #client_socket = establecerConexionTCP(direccion, int(sys.argv[1]))
+            #enviarMensajeTCP(client_socket, "A-" + usuario + "-" + " " + "\r\n")
+            #with open(str(mensaje), "rb") as archivo:
+            #    while datos := archivo.read(1024):
+            #        client_socket.sendall(datos)
+            #client_socket.close()
+            pass
+
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
     recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    recept_socket.bind(("192.168.1.134", int(sys.argv[1])))
+    recept_socket.bind(("127.0.0.2", int(sys.argv[1])))
     recept_socket.listen(5)
 
 
     def hilo_cliente(client_socket, client_addr):
         enviarMensajeTCP(client_socket, "Redes - Mensajeria - 2026\r\n")
         buf = ""
-        buf = recibirTCP(client_socket, buf)
+        buf = recibirMensajeTCP(client_socket, buf)
         msg = buf.removesuffix("\r\n")
         msg = msg.split("-", 2)
 
@@ -135,6 +151,7 @@ def hilo_receptor():
                 print("[" + Tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
 
             elif msg[0] == "A":
+                #Falta implementacion
                 pass
 
         client_socket.close()
@@ -148,9 +165,11 @@ def main():
     
     receptor = threading.Thread(target=hilo_receptor, daemon=True)
     emisor = threading.Thread(target=hilo_emisor, daemon=True)
+    escucha_broadcast = threading.Thread(target=hilo_escucha_broadcast, daemon=True)
 
     receptor.start()
     emisor.start()
+    escucha_broadcast.start()
 
     try:
         while True:
@@ -160,3 +179,4 @@ def main():
         sys.exit(0)
 
 main()
+

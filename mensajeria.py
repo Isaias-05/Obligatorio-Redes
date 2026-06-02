@@ -22,7 +22,7 @@ def controlEntradaEstandar():
     while True:
 
         #Lee la entrada estandar y valida que tenga el formato correcto, es decir: "ip mensaje" o "ip &file rutaArchivo"
-        entrada = input(" > ")
+        entrada = input()
         entrada = entrada.strip()
         entrada = entrada.split(maxsplit=1)
 
@@ -78,7 +78,6 @@ def establecerConexionTCP(ip, puerto):
     buf = ""
     buf = recibirTCP(client_socket, buf)
     buf = buf.removesuffix("\r\n")
-    print(buf)
 
     if buf != "Redes - Mensajeria - 2026":  
         print("ERROR: Protocolo incorrecto.\n") 
@@ -114,7 +113,7 @@ def hilo_emisor():
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
     recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    recept_socket.bind(("127.0.0.2", int(sys.argv[1])))
+    recept_socket.bind(("192.168.1.134", int(sys.argv[1])))
     recept_socket.listen(5)
 
 
@@ -147,10 +146,10 @@ def hilo_receptor():
         
 def main():
     
-    #receptor = threading.Thread(target=hilo_receptor, daemon=True)
+    receptor = threading.Thread(target=hilo_receptor, daemon=True)
     emisor = threading.Thread(target=hilo_emisor, daemon=True)
 
-    #receptor.start()
+    receptor.start()
     emisor.start()
 
     try:

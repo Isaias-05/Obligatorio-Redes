@@ -87,7 +87,7 @@ def establecerConexionTCP(ip, puerto):
         print("ERROR: Protocolo incorrecto.\n") 
         sys.exit(1)
 
-    return client_socket  
+    return client_socket 
 
 def enviarMensajeUDP(ip, puerto, msg):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -142,14 +142,9 @@ def hilo_emisor():
                 while datos := archivo.read(4096):
                     client_socket.sendall(datos)
 
-def hilo_receptor():
-    # Crea socket TCP y asocia puerto de escucha
-    recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    recept_socket.bind((ipGlobal, int(sys.argv[1])))
-    recept_socket.listen(5)
 
 
-    def hilo_cliente(client_socket, client_addr):
+def hilo_cliente(client_socket, client_addr):
         enviarMensajeTCP(client_socket, "Redes - Mensajeria - 2026\r\n")
         buf = ""
         buf = recibirMensajeTCP(client_socket, buf)
@@ -174,6 +169,13 @@ def hilo_receptor():
                     archivo.write(data)
 
         client_socket.close()
+
+
+def hilo_receptor():
+    # Crea socket TCP y asocia puerto de escucha
+    recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    recept_socket.bind((ipGlobal, int(sys.argv[1])))
+    recept_socket.listen(5)
 
     while True:
         # Acepto la conexion entrante
@@ -201,3 +203,4 @@ main()
 
 #192.168.1.134 buenash
 #192.168.1.134 &file ./lab1.pdf
+#localhost &file ./lab1.pdf

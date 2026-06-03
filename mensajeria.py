@@ -109,7 +109,7 @@ def recibirArchivoTCP(client_socket, tamaño_archivo):
 def hilo_escucha_broadcast():
     # Crea socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.bind((ipGlobal, int(sys.argv[1]) + 1))
+    server_socket.bind(("0.0.0.0", int(sys.argv[1]) + 1))
 
     while True:
         # Recibe msg
@@ -137,15 +137,15 @@ def hilo_emisor():
             tamaño_archivo = os.path.getsize(ruta)
             nombre_archivo = os.path.basename(ruta)
             client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]))
-            enviarMensajeTCP(client_socket, "A-"+ nombre_archivo + "-" + tamaño_archivo + "\r\n")
+            enviarMensajeTCP(client_socket, "A-"+ nombre_archivo + "-" + str(tamaño_archivo) + "\r\n")
             with open(ruta, "rb") as archivo:
                 while datos := archivo.read(4096):
-                    socket.sendall(datos)
+                    client_socket.sendall(datos)
 
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
     recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    recept_socket.bind(("127.0.0.2", int(sys.argv[1])))
+    recept_socket.bind((ipGlobal, int(sys.argv[1])))
     recept_socket.listen(5)
 
 
@@ -168,7 +168,7 @@ def hilo_receptor():
 
             elif msg[0] == "A":
                 nombre_archivo = msg[1]
-                tamaño_archivo = msg[2]
+                tamaño_archivo = int(msg[2])
                 data = recibirArchivoTCP(client_socket,tamaño_archivo)
                 with open(nombre_archivo, "wb") as archivo:
                     archivo.write(data)
@@ -199,3 +199,5 @@ def main():
 #* &file ./redes2026-lab1.pdf
 main()
 
+#192.168.1.134 buenash
+#192.168.1.134 &file ./lab1.pdf

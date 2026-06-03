@@ -5,6 +5,7 @@ import time
 import ipaddress
 import getpass
 from pathlib import Path
+import os
 
 ipGlobal = "192.168.1.127"
 
@@ -44,6 +45,8 @@ def controlEntradaEstandar():
 
                     if not ruta.is_file():
                         print("Error: el archivo no existe")
+                    elif direccion == "255.255.255.255":
+                        print("Error: no se pueden enviar archivos por broadcast")
                     else:
                         tipo = "archivo"
                         return tipo, direccion, ruta.resolve()
@@ -90,6 +93,19 @@ def enviarMensajeUDP(ip, puerto, msg):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client_socket.sendto(msg.encode('utf-8'), (ip, puerto))
     
+def recibirArchivoTCP(client_socket, tamaño_archivo):
+    data = b""
+    recibidos = 0
+    while recibidos < tamaño_archivo:
+        chunk = client_socket.recv(min(4096, tamaño_archivo - recibidos))
+        if not chunk:
+            print("Error: conexión cerrada antes de recibir el archivo completo")
+            break
+        data += chunk
+        recibidos += len(chunk)
+
+    return data
+
 def hilo_escucha_broadcast():
     # Crea socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -107,24 +123,24 @@ def hilo_escucha_broadcast():
         
 def hilo_emisor():
     while True:
-        tipo, direccion, mensaje = controlEntradaEstandar()
+        tipo, direccionIP, mensaje = controlEntradaEstandar()
         usuario = getpass.getuser()
 
-        if direccion == "255.255.255.255":
-            enviarMensajeUDP(direccion, int(sys.argv[1]) + 1, usuario + "-" + mensaje)
+        if direccionIP == "255.255.255.255":
+            enviarMensajeUDP(direccionIP, int(sys.argv[1]) + 1, usuario + "-" + mensaje)
         elif tipo == "mensaje":
-            client_socket = establecerConexionTCP(direccion, int(sys.argv[1]))
+            client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]))
             enviarMensajeTCP(client_socket, "M-"+ usuario + "-" + mensaje + "\r\n")
             client_socket.close()
-        elif tipo == "archivo": 
-            #Falta implementacion, 
-            #client_socket = establecerConexionTCP(direccion, int(sys.argv[1]))
-            #enviarMensajeTCP(client_socket, "A-" + usuario + "-" + " " + "\r\n")
-            #with open(str(mensaje), "rb") as archivo:
-            #    while datos := archivo.read(1024):
-            #        client_socket.sendall(datos)
-            #client_socket.close()
-            pass
+        elif tipo == "archivo":
+            ruta = mensaje
+            tamaño_archivo = os.path.getsize(ruta)
+            nombre_archivo = os.path.basename(ruta)
+            client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]))
+            enviarMensajeTCP(client_socket, "A-"+ nombre_archivo + "-" + tamaño_archivo + "\r\n")
+            with open(ruta, "rb") as archivo:
+                while datos := archivo.read(4096):
+                    socket.sendall(datos)
 
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
@@ -151,8 +167,11 @@ def hilo_receptor():
                 print("[" + Tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
 
             elif msg[0] == "A":
-                #Falta implementacion
-                pass
+                nombre_archivo = msg[1]
+                tamaño_archivo = msg[2]
+                data = recibirArchivoTCP(client_socket,tamaño_archivo)
+                with open(nombre_archivo, "wb") as archivo:
+                    archivo.write(data)
 
         client_socket.close()
 
@@ -177,6 +196,6 @@ def main():
     except KeyboardInterrupt:
         print("\nPrograma terminado")
         sys.exit(0)
-
+#* &file ./redes2026-lab1.pdf
 main()
 

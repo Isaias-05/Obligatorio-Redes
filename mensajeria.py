@@ -1,13 +1,13 @@
-import threading
-import socket
-import sys
-import time
-import getpass
-from pathlib import Path
-import os
-import hashlib
+import threading #Manejo de hilos
+import socket #Manejo de sockets
+import sys #Manejo del sistema
+import signal #Señales del sistema
+import time #Tiempo
+import getpass #Obterer user
+from pathlib import Path #Obtener la ruta del archivo
+import os #Obtener tamaño y nombre de archivo
+import hashlib #Hashear la contraseña a MD5
 
-ipGlobal = "192.168.1.127"
 
 def es_direccion_valida(direccion):    
     if direccion == "*":
@@ -17,23 +17,22 @@ def es_direccion_valida(direccion):
             ip = socket.gethostbyname(direccion)
             return True, ip
         except socket.gaierror:
-            print("Error: Ip o nombre de dominio invalido")
             return False, None
-
+        
 def controlEntradaEstandar():     
     while True:
 
         #Lee la entrada estandar y valida que tenga el formato correcto, es decir: "ip mensaje" o "ip &file rutaArchivo"
-        entrada = input(" > ")
+        entrada = input("> ")
         entrada = entrada.strip()
         entrada = entrada.split(maxsplit=1)
 
-        if len(entrada) == 2 and entrada[0] and entrada[1] :
+        if len(entrada) == 2 :
             
             direccion = entrada[0]
             mensaje = entrada[1]
 
-            esDireccion, direccion = es_direccion_valida(direccion); 
+            esDireccion, direccion = es_direccion_valida(direccion)
 
             if esDireccion:
 
@@ -54,6 +53,9 @@ def controlEntradaEstandar():
                 else:
                     tipo = "mensaje"
                     return tipo, direccion, mensaje
+                
+            else:
+                print("Direccion IP invalida")
         else:
             print("Comando invalido")
             continue
@@ -104,7 +106,6 @@ def recibirArchivoTCP(client_socket, tamaño_archivo):
 
     return data
 
-
 def iniciarSesion():
     ipAuth = socket.gethostbyname("ti.esi.edu.uy")
     while True:
@@ -126,9 +127,6 @@ def iniciarSesion():
             break
         else: 
             print("Usuario o contraseña incorrecta")
-
-        
-iniciarSesion()
 
 def hilo_escucha_broadcast():
     # Crea socket UDP
@@ -153,18 +151,25 @@ def hilo_emisor():
         if direccionIP == "255.255.255.255":
             enviarMensajeUDP(direccionIP, int(sys.argv[1]) + 1, usuario + "-" + mensaje)
         elif tipo == "mensaje":
-            client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]), str("Redes - Mensajeria - 2026"))
-            enviarMensajeTCP(client_socket, "M-"+ usuario + "-" + mensaje + "\r\n")
-            client_socket.close()
+            try:
+                client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]), str("Redes - Mensajeria - 2026"))
+                enviarMensajeTCP(client_socket, "M-"+ usuario + "-" + mensaje + "\r\n")
+                client_socket.close()
+            except: 
+                print("Error de conexion - hostname o ip invalida")
         elif tipo == "archivo":
             ruta = mensaje
             tamaño_archivo = os.path.getsize(ruta)
             nombre_archivo = os.path.basename(ruta)
-            client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]),str("Redes - Mensajeria - 2026"))
-            enviarMensajeTCP(client_socket, "A-"+ nombre_archivo + "-" + str(tamaño_archivo) + "\r\n")
-            with open(ruta, "rb") as archivo:
-                while datos := archivo.read(4096):
-                    client_socket.sendall(datos)
+
+            try:
+                client_socket = establecerConexionTCP(direccionIP, int(sys.argv[1]),str("Redes - Mensajeria - 2026"))
+                enviarMensajeTCP(client_socket, "A-"+ nombre_archivo + "-" + str(tamaño_archivo) + "\r\n")
+                with open(ruta, "rb") as archivo:
+                    while datos := archivo.read(4096):
+                        client_socket.sendall(datos)
+            except: 
+                print("Error de conexion - hostname o ip invalida")
 
 def hilo_cliente(client_socket, client_addr):
         enviarMensajeTCP(client_socket, "Redes - Mensajeria - 2026\r\n")
@@ -178,9 +183,9 @@ def hilo_cliente(client_socket, client_addr):
             return
         else:
             if  msg[0] == "M":
-                Tiempo = time.strftime("%Y.%m.%d %H:%M:%S")
+                tiempo = time.strftime("%Y.%m.%d %H:%M:%S")
                 usuario = msg[1]
-                print("[" + Tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
+                print("[" + tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
 
             elif msg[0] == "A":
                 nombre_archivo = msg[1]
@@ -194,15 +199,26 @@ def hilo_cliente(client_socket, client_addr):
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
     recept_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    recept_socket.bind((ipGlobal, int(sys.argv[1])))
+    recept_socket.bind(("0.0.0.0", int(sys.argv[1])))
     recept_socket.listen(5)
 
     while True:
         # Acepto la conexion entrante
         client_socket, client_addr = recept_socket.accept()
         threading.Thread(target=hilo_cliente, args=(client_socket, client_addr), daemon=True).start()
-        
+
+def manejador_term(sig,frame):
+   
+    if sig == 2:
+        print(f'\nSeñal CTRL + C recibida.... Cerrando Sesión')
+    elif sig == 15: 
+        print(f'\nSeñal KILL recibida.... Cerrando Sesión')
+
+    sys.exit(0)
+ 
 def main():
+    
+    iniciarSesion()
     
     receptor = threading.Thread(target=hilo_receptor, daemon=True)
     emisor = threading.Thread(target=hilo_emisor, daemon=True)
@@ -212,14 +228,22 @@ def main():
     emisor.start()
     escucha_broadcast.start()
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nPrograma terminado")
-        sys.exit(0)
+    signal.signal(signal.SIGINT, manejador_term)
+    signal.signal(signal.SIGTERM, manejador_term)
+
+    while True:
+        time.sleep(1)
 
 main()
+
+
+
+
+
+
+
+
+
 
 #* &file ./redes2026-lab1.pdf
 #192.168.1.134 buenash

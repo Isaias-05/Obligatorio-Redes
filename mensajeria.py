@@ -8,8 +8,9 @@ from pathlib import Path #Obtener la ruta del archivo
 import os #Obtener tamaño y nombre de archivo
 import hashlib #Hashear la contraseña a MD5
 
+evento_fin = threading.Event() #Evento para finalizar hilos y sockets de forma correcta. 
 
-def es_direccion_valida(direccion):    
+def es_direccion_valida(direccion):
     if direccion == "*":
         return True, "255.255.255.255"
     else:
@@ -28,10 +29,9 @@ def controlEntradaEstandar():
         entrada = entrada.split(maxsplit=1)
 
         if len(entrada) == 2 :
-            
+
             direccion = entrada[0]
             mensaje = entrada[1]
-
             esDireccion, direccion = es_direccion_valida(direccion)
 
             if esDireccion:
@@ -61,6 +61,7 @@ def controlEntradaEstandar():
             continue
 
 def recibirMensajeTCP(client_socket):
+    client_socket.settimeout(5) 
     buf = ""
     while True:
         data = client_socket.recv(1024)
@@ -107,33 +108,40 @@ def recibirArchivoTCP(client_socket, tamaño_archivo):
     return data
 
 def iniciarSesion():
-    ipAuth = socket.gethostbyname("ti.esi.edu.uy")
-    while True:
-
-        usuario = input("Usuario: ")
-        #contraseña = getpass.getpass("Clave: ")
-        contraseña = input("Contraseña: ")
-        solicitud = usuario +"-"+ hashlib.md5(contraseña.encode()).hexdigest() + "\r\n"
-        socket_IniciarSesion = establecerConexionTCP(ipAuth, 33,"Redes 2026 - Laboratorio - Autenticacion de Usuarios")
-        enviarMensajeTCP(socket_IniciarSesion, solicitud)
+    ipAuth = socket.gethostbyname(sys.argv[2])
+    portAuth = int(sys.argv[3])
     
-        respuesta = recibirMensajeTCP(socket_IniciarSesion)
-        respuesta = respuesta.removesuffix("\r\n")
+    try: 
+        while True:
         
-        if respuesta == "SI":
+            usuario = input("Usuario: ")
+            contraseña = getpass.getpass("Clave: ")
+            
+            solicitud = usuario +"-"+ hashlib.md5(contraseña.encode()).hexdigest() + "\r\n"
+            socket_IniciarSesion = establecerConexionTCP(ipAuth, portAuth,"Redes 2026 - Laboratorio - Autenticacion de Usuarios")
+            enviarMensajeTCP(socket_IniciarSesion, solicitud)
+        
             respuesta = recibirMensajeTCP(socket_IniciarSesion)
             respuesta = respuesta.removesuffix("\r\n")
-            print("Bienvenido " + respuesta)
-            break
-        else: 
-            print("Usuario o contraseña incorrecta")
+            
+            if respuesta == "SI":
+                respuesta = recibirMensajeTCP(socket_IniciarSesion)
+                respuesta = respuesta.removesuffix("\r\n")
+                print("Bienvenido " + respuesta)
+                break
+            else: 
+                print("Usuario o contraseña incorrecta")
+
+    except KeyboardInterrupt:
+        print("\nSeñal CTRL + C recibida.... Cerrando Sesión")
+        evento_fin.set()
 
 def hilo_escucha_broadcast():
     # Crea socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(("0.0.0.0", int(sys.argv[1]) + 1))
 
-    while True:
+    while not evento_fin.is_set():
         # Recibe msg
         data, addr = server_socket.recvfrom(1024)
         msg = data.decode('utf-8').strip()
@@ -144,7 +152,8 @@ def hilo_escucha_broadcast():
         print("[" + Tiempo + "] " + str(addr[0]) + " - " + usuario + " dice: " + msg[1])
 
 def hilo_emisor():
-    while True:
+    while not evento_fin.is_set():
+        time.sleep(0.1)
         tipo, direccionIP, mensaje = controlEntradaEstandar()
         usuario = getpass.getuser()
 
@@ -172,29 +181,30 @@ def hilo_emisor():
                 print("Error de conexion - hostname o ip invalida")
 
 def hilo_cliente(client_socket, client_addr):
-        enviarMensajeTCP(client_socket, "Redes - Mensajeria - 2026\r\n")
-        buf = recibirMensajeTCP(client_socket)
-        msg = buf.removesuffix("\r\n")
-        msg = msg.split("-", 2)
+    enviarMensajeTCP(client_socket, "Redes - Mensajeria - 2026\r\n")
+    buf = recibirMensajeTCP(client_socket)
+    msg = buf.removesuffix("\r\n")
+    msg = msg.split("-", 2)
 
-        if len(msg) < 3:
-            enviarMensajeTCP(client_socket, "Comando no conocido\r\n")
-            client_socket.close()
-            return
-        else:
-            if  msg[0] == "M":
-                tiempo = time.strftime("%Y.%m.%d %H:%M:%S")
-                usuario = msg[1]
-                print("[" + tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
-
-            elif msg[0] == "A":
-                nombre_archivo = msg[1]
-                tamaño_archivo = int(msg[2])
-                data = recibirArchivoTCP(client_socket,tamaño_archivo)
-                with open(nombre_archivo, "wb") as archivo:
-                    archivo.write(data)
-
+    if len(msg) < 3:
+        enviarMensajeTCP(client_socket, "Comando no conocido\r\n")
         client_socket.close()
+        return
+    else:
+        if  msg[0] == "M":
+            tiempo = time.strftime("%Y.%m.%d %H:%M:%S")
+            usuario = msg[1]
+            print("[" + tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
+
+        elif msg[0] == "A":
+            #nombre_archivo = msg[1]
+            nombre_archivo = "a.pdf"
+            tamaño_archivo = int(msg[2])
+            data = recibirArchivoTCP(client_socket,tamaño_archivo)
+            with open(nombre_archivo, "wb") as archivo:
+                archivo.write(data)
+
+    client_socket.close()
 
 def hilo_receptor():
     # Crea socket TCP y asocia puerto de escucha
@@ -202,22 +212,30 @@ def hilo_receptor():
     recept_socket.bind(("0.0.0.0", int(sys.argv[1])))
     recept_socket.listen(5)
 
-    while True:
+    while not evento_fin.is_set():
         # Acepto la conexion entrante
         client_socket, client_addr = recept_socket.accept()
         threading.Thread(target=hilo_cliente, args=(client_socket, client_addr), daemon=True).start()
 
-def manejador_term(sig,frame):
-   
-    if sig == 2:
-        print(f'\nSeñal CTRL + C recibida.... Cerrando Sesión')
-    elif sig == 15: 
-        print(f'\nSeñal KILL recibida.... Cerrando Sesión')
+    recept_socket.close()
 
-    sys.exit(0)
+def manejador_sigint(sig,frame):
+    print(f'\nSeñal CTRL + C recibida.... Cerrando Sesión - Presione Enter')
+    evento_fin.set()
+
+def manejador_sigterm(sig,frame):
+    print(f'\nSeñal KILL recibida.... Cerrando Sesión - Presione Enter')
+    evento_fin.set()
  
 def main():
+
+    if len(sys.argv) < 4:
+        print("Error: faltan argumentos. Uso: mensajeria.py port ipAuth portAuth")
+        sys.exit(1)
     
+    #signal.signal(signal.SIGINT, manejador_sigint)
+    #signal.signal(signal.SIGTERM, manejador_sigterm)
+
     iniciarSesion()
     
     receptor = threading.Thread(target=hilo_receptor, daemon=True)
@@ -228,24 +246,7 @@ def main():
     emisor.start()
     escucha_broadcast.start()
 
-    signal.signal(signal.SIGINT, manejador_term)
-    signal.signal(signal.SIGTERM, manejador_term)
-
-    while True:
-        time.sleep(1)
+    evento_fin.wait()
 
 main()
 
-
-
-
-
-
-
-
-
-
-#* &file ./redes2026-lab1.pdf
-#192.168.1.134 buenash
-#192.168.1.134 &file ./lab1.pdf
-#localhost &file ./lab1.pdf

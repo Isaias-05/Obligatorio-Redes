@@ -233,10 +233,10 @@ def main():
         print("Error: faltan argumentos. Uso: mensajeria.py port ipAuth portAuth")
         sys.exit(1)
     
-    #signal.signal(signal.SIGINT, manejador_sigint)
-    #signal.signal(signal.SIGTERM, manejador_sigterm)
-
     iniciarSesion()
+
+    signal.signal(signal.SIGINT, manejador_sigint)
+    signal.signal(signal.SIGTERM, manejador_sigterm)
     
     receptor = threading.Thread(target=hilo_receptor, daemon=True)
     emisor = threading.Thread(target=hilo_emisor, daemon=True)

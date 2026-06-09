@@ -25,7 +25,6 @@ def controlEntradaEstandar():
 
         #Lee la entrada estandar y valida que tenga el formato correcto, es decir: "ip mensaje" o "ip &file rutaArchivo"
         entrada = input("> ")
-        entrada = entrada.strip()
         entrada = entrada.split(maxsplit=1)
 
         if len(entrada) == 2 :
@@ -86,7 +85,7 @@ def establecerConexionTCP(ip, puerto, respuesta):
 
     if buf != respuesta:  
         print("ERROR: Protocolo incorrecto.\n") 
-        sys.exit(1)
+        client_socket.close()
 
     return client_socket 
 

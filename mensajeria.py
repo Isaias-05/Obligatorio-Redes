@@ -196,8 +196,8 @@ def hilo_cliente(client_socket, client_addr):
             print("[" + tiempo + "] " + str(client_addr[0]) + " - " + usuario + " dice: " + msg[2])
 
         elif msg[0] == "A":
-            #nombre_archivo = msg[1]
-            nombre_archivo = "a.pdf"
+            nombre_archivo = msg[1]
+            #nombre_archivo = "a.pdf"
             tamaño_archivo = int(msg[2])
             data = recibirArchivoTCP(client_socket,tamaño_archivo)
             with open(nombre_archivo, "wb") as archivo:
